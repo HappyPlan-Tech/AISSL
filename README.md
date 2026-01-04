@@ -1,93 +1,71 @@
-# AISSL
+# AI API Certificate Hash Fetcher (AI API 证书哈希自动获取工具)
 
+这是一个自动化工具，用于定期获取和更新主流 AI 服务（如 OpenAI, 阿里云, Volcengine, Minimax, Google Gemini 等）API 接口的 TLS 证书公钥哈希值。
 
+该项目主要用于配合客户端（如 iOS/Android 应用）实施 **SSL Pinning (证书锁定)** 安全策略，确保应用只信任合法的服务端证书，防止中间人攻击 (MITM)。
 
-## Getting started
+## 核心功能
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+*   **自动监控**: 通过 GitHub Actions 定时（每 6 小时）扫描目标 API。
+*   **证书提取**: 建立 TLS 连接并获取服务器的 Leaf（叶子）证书。
+*   **哈希计算**: 提取证书公钥并计算 SHA256 哈希值 (Base64 编码)，格式兼容 iOS/Apple 的原生 SSL Pinning 实现。
+*   **自动更新**: 如果发现新的证书哈希值（例如服务商更换了证书），会自动更新到 `ValidAICertificatesHash.json` 并提交到仓库。
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## 项目结构
 
-## Add your files
+*   `leaf_cert_public_fetcher.py`: 核心 Python 脚本。
+    *   定义了需要监控的 API URL 列表 (`api_urls`)。
+    *   实现了 SSL 连接、证书提取、iOS 兼容的公钥格式化及哈希计算逻辑。
+*   `ValidAICertificatesHash.json`: 数据存储文件。
+    *   包含一个 `hashs` 列表，存储所有捕获到的有效证书哈希。
+*   `.github/workflows/cert_hash_updater.yml`: 自动化工作流配置。
+    *   配置为北京时间每日 00:00, 06:00, 12:00, 18:00 自动运行。
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## 如何使用
 
-```
-cd existing_repo
-git remote add origin https://gitlab.com/dtdstudios/AISSL.git
-git branch -M main
-git push -uf origin main
-```
+### 1. 数据接入
+客户端应用应通过网络请求读取本仓库的 `ValidAICertificatesHash.json` Raw 文件，或在构建时将其打包进应用中，用作 SSL Pinning 的白名单验证依据。
 
-## Integrate with your tools
+### 2. 本地运行 (开发与调试)
+如果你需要手动运行或调试脚本：
 
-- [ ] [Set up project integrations](https://gitlab.com/dtdstudios/AISSL/-/settings/integrations)
+1.  环境准备：
+    ```bash
+    pip install cryptography
+    ```
+2.  运行脚本：
+    ```bash
+    python leaf_cert_public_fetcher.py
+    ```
+    脚本会输出每个域名的检查结果，如果有新哈希，会自动修改本地的 JSON 文件。
 
-## Collaborate with your team
+### 3. 添加新的 API 监控
+如果需要监控新的 AI 服务商：
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+1.  编辑 `leaf_cert_public_fetcher.py`。
+2.  在 `main` 函数中的 `api_urls` 列表里添加新的 API 地址。
+    ```python
+    api_urls = [
+        "https://api.openai.com/v1/chat/completions",
+        # 新增地址
+        "https://api.new-service.com/v1/..."
+    ]
+    ```
+3.  提交更改。GitHub Actions 会在下一次运行时自动获取新地址的证书哈希。
 
-## Test and Deploy
+## GitHub Actions 配置 (关键)
 
-Use the built-in continuous integration in GitLab.
+为了让自动化脚本能够成功提交哈希值的更新，你需要在 Fork 或导入此项目后，对 GitHub 仓库的 Actions 权限进行配置：
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+1.  进入项目仓库的 **Settings** (设置) 页面。
+2.  在左侧菜单栏找到 **Actions** -> **General**。
+3.  向下滚动到 **Workflow permissions** (工作流权限) 区域。
+4.  勾选 **Read and write permissions** (读写权限)。
+5.  点击 **Save** (保存)。
 
-***
+> **⚠️ 注意**: 默认情况下 GitHub 可能只授予 Read 权限。如果不开启此权限，GitHub Action 在尝试 `git push` 时会报错 `Permission denied`，导致哈希值无法自动更新。
 
-# Editing this README
+## 维护说明 (交接必读)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+*   **哈希算法**: 脚本中 `get_ios_style_ec_public_key_bytes` 函数专门处理了 Elliptic Curve (EC) 公钥，确保生成的二进制格式与 iOS 系统 API (`SecKeyCopyExternalRepresentation`) 的输出一致。这是为了确保存储的哈希值能直接被 iOS 客户端校验。
+*   **触发频率**: 目前设置为每 6 小时一次。如果 API 服务商频繁更换证书（极其罕见），可以调整 `.github/workflows/cert_hash_updater.yml` 中的 cron 表达式。
