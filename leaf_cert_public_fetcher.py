@@ -86,7 +86,8 @@ def main():
         "https://api.openai.com/v1/chat/completions",
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         "https://api.minimaxi.com/v1/t2a_v2",
-        "https://api-uw.minimax.io/v1/t2a_v2"
+        "https://api-uw.minimax.io/v1/t2a_v2",
+        "https://openrouter.ai/api/v1/chat/completions"
     ]
     
     for url in api_urls:
